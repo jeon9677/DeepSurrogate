@@ -57,7 +57,7 @@ def get_model_deepsurrogate(
     final = concatenate([B_eta_sum, local_input])
     out = Dense(1, activation=final_act)(final)
 
-    model = Model(inputs=[inp_global, s_input, local_input], outputs=final_output)
+    model = Model(inputs=[inp_global, s_input, local_input], outputs=out)
 
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate=1e-2,
