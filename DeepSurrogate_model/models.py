@@ -57,7 +57,17 @@ def get_model_deepsurrogate(
     final = concatenate([B_eta_sum, local_input])
     out = Dense(1, activation=final_act)(final)
 
-    model = Model(inputs=[inp_global, s_input, local_input], outputs=out)
+    # Log-sigma^2 term
+    log_sigma2 = Dense(32, activation='softplus')(s_input)
+    log_sigma2 = get_dropout(log_sigma2, p=0.1, mc=mc)
+    log_sigma2 = Dense(16, activation='softplus')(log_sigma2)
+    log_sigma2 = get_dropout(log_sigma2, p=0.1, mc=mc)
+    log_sigma2 = Dense(1, activation='linear', name='log_sigma2')(log_sigma2)
+
+    noise = Lambda(lambda x: tf.exp(x), name='lognormal_noise')(log_sigma2)
+    final_output = Add(name='final_output')([out, noise])
+    
+    model = Model(inputs=[inp_global, s_input, local_input], outputs=final_output)
 
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate=1e-2,
