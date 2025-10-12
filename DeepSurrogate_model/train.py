@@ -17,16 +17,16 @@ def train_model_ver8(
 ):
     """
     """
-    model = get_model_ver8(
-        global_dim=global_dim,
-        spatial_dim=spatial_dim,
-        local_dim=local_dim,
-        global_hidden=global_hidden,
-        spatial_hidden=spatial_hidden,
-        noise_hidden=noise_hidden,
-        dropout_p=dropout_p,
-        mc=mc
-    )
+    model = get_model_deepsurrogate(
+    global_dim=global_dim,
+    spatial_dim=spatial_dim,
+    local_dim=local_dim,
+    global_hidden=global_hidden,
+    spatial_hidden=spatial_hidden,
+    noise_hidden=noise_hidden,
+    dropout_p=dropout_p,
+    mc=mc
+)
 
     history = model.fit(
         X_train, y_train,
