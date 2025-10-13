@@ -30,97 +30,76 @@ cd DeepSurrogate_model
 
 # Install locally
 pip install .
+
 ```
 ---
 
 ## A basic example of using the package
+Note: The toy example below only illustrates the data structure used to run the model. It does not replicate the full complexity of the simulations used in the paper. For actual analysis, please follow the simulation design described in the paper.
 
 ```bash
-python - <<'PY'
-import numpy as np
-from sklearn.model_selection import train_test_split
+
+import argparse, numpy as np, tensorflow as tf
 from DeepSurrogate_model.models import get_model_deepsurrogate
-import tensorflow as tf
 
-# -----------------------------
-# 1) Toy data: y (s,m), x (s,p), z (m,q)
-# -----------------------------
-s, m, p, q = 300, 148, 2, 5
-spatial_dim = 2
-rng = np.random.default_rng(42)
+def make_data(s=300, m=148, p=2, q=5, spatial_dim=2, seed=42):
+    rng = np.random.default_rng(seed)
+    coords = rng.uniform(-1, 1, size=(m, spatial_dim)).astype("float32")
+    x = rng.normal(size=(s, p)).astype("float32")
+    base = rng.normal(size=(q,)).astype("float32")
+    rep = 10
+    tmpl = np.repeat(base, rep)
+    z_full = np.resize(tmpl, m)
+    z = np.stack([np.roll(z_full, k) for k in range(q)], axis=1).astype("float32")
+    beta_g = rng.normal(size=p); beta_l = rng.normal(size=q)
+    spat = (coords @ rng.normal(size=(spatial_dim,1))).squeeze()
+    spat = (spat - spat.mean())/(spat.std()+1e-8)
+    y = np.stack([0.5*spat + x[i]@beta_g + z@beta_l +
+                  rng.normal(scale=0.3, size=m) for i in range(s)]).astype("float32")
+    return y, x, z, coords
 
-coords = rng.uniform(-1, 1, size=(m, spatial_dim)).astype("float32")  # (m, spatial_dim)
-x = rng.normal(size=(s, p)).astype("float32")                          # (s, p)
-
-# z with repeated blocks along ROI axis: (m, q)
-base = rng.normal(size=(q,)).astype("float32")
-rep = 10
-tmpl = np.repeat(base, rep)
-z_full = np.resize(tmpl, m)  # cycle to length m
-z = np.stack([np.roll(z_full, k) for k in range(q)], axis=1).astype("float32")  # (m, q)
-
-# Generate y: (s, m)
-beta_g = rng.normal(size=p)
-beta_l = rng.normal(size=q)
-spat = (coords @ rng.normal(size=(spatial_dim,1))).squeeze()
-spat = (spat - spat.mean())/(spat.std()+1e-8)
-y = np.zeros((s, m), dtype="float32")
-for i in range(s):
-    mu = 0.5*spat + x[i]@beta_g + z@beta_l
-    y[i] = mu + rng.normal(scale=0.3, size=m)
-
-# -----------------------------
-# 2) Pack to sample-wise tensors for Keras
-#    inputs: [global_inp, spatial, local], target: (s*m,1)
-# -----------------------------
 def pack(y, x, z, coords):
-    s, m = y.shape
-    G = np.repeat(x, m, axis=0)                        # (s*m, p)
-    S = np.tile(coords, (s,1))                         # (s*m, spatial_dim)
-    L = np.tile(z, (s,1))                              # (s*m, q)
-    Y = y.reshape(-1, 1)                               # (s*m, 1)
+    s, m = y.shape; p = x.shape[1]; q = z.shape[1]; sd = coords.shape[1]
+    G = np.repeat(x, m, axis=0).reshape(s*m, p)
+    S = np.tile(coords, (s,1)).reshape(s*m, sd)
+    L = np.tile(z, (s,1)).reshape(s*m, q)
+    Y = y.reshape(s*m, 1)
     return [G.astype("float32"), S.astype("float32"), L.astype("float32")], Y.astype("float32")
 
-idx = np.arange(s)
-rng.shuffle(idx)
-tr, te = idx[:int(0.8*s)], idx[int(0.8*s):]
-va_split = int(0.9*s)
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--s", type=int, default=300)
+    ap.add_argument("--m", type=int, default=148)
+    ap.add_argument("--p", type=int, default=2)
+    ap.add_argument("--q", type=int, default=5)
+    ap.add_argument("--spatial-dim", type=int, default=2)
+    ap.add_argument("--epochs", type=int, default=10)
+    ap.add_argument("--batch-size", type=int, default=128)
+    ap.add_argument("--mc", type=lambda s: s.lower() in {"1","true","yes","y"}, default=True)
+    ap.add_argument("--seed", type=int, default=42)
+    args = ap.parse_args()
 
-X_tr, y_tr = pack(y[tr], x[tr], z, coords)
-X_va, y_va = pack(y[idx[int(0.8*s):va_split]], x[idx[int(0.8*s):va_split]], z, coords)
-X_te, y_te = pack(y[te], x[te], z, coords)
+    y, x, z, coords = make_data(args.s, args.m, args.p, args.q, args.spatial_dim, args.seed)
+    idx = np.arange(args.s); np.random.default_rng(args.seed).shuffle(idx)
+    tr, va, te = idx[:int(0.7*args.s)], idx[int(0.7*args.s):int(0.85*args.s)], idx[int(0.85*args.s):]
+    X_tr, y_tr = pack(y[tr], x[tr], z, coords)
+    X_va, y_va = pack(y[va], x[va], z, coords)
+    X_te, y_te = pack(y[te], x[te], z, coords)
 
-# -----------------------------
-# 3) Build, train, evaluate
-# -----------------------------
-model = get_model_deepsurrogate(
-    global_dim=p, spatial_dim=spatial_dim, local_dim=q,
-    global_hidden=[16,8], spatial_hidden=[16,8],
-    dropout_p=0.1, mc=True, final_act="linear"  # regression
-)
-model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss="mse")
+    model = get_model_deepsurrogate(global_dim=args.p, spatial_dim=args.spatial_dim,
+                                    local_dim=args.q, mc=args.mc, final_act="linear")
+    model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss="mse")
+    model.fit(X_tr, y_tr, validation_data=(X_va, y_va),
+              epochs=args.epochs, batch_size=args.batch_size, verbose=1)
 
-history = model.fit(X_tr, y_tr,
-                    validation_data=(X_va, y_va),
-                    epochs=10, batch_size=128, verbose=1)
+    # MC prediction
+    n_samples = 100
+    preds = np.stack([model.predict(X_te, verbose=0).squeeze() for _ in range(n_samples)], axis=0)
+    mean_pred = preds.mean(axis=0)
+    rmse = float(np.sqrt(np.mean((y_te.squeeze() - mean_pred)**2)))
+    print(f"RMSE: {rmse:.4f})
 
-# MC-dropout predictions on test
-n_samples = 100
-mc_preds = []
-for _ in range(n_samples):
-    mc_preds.append(model.predict(X_te, verbose=0).squeeze())
-mc_preds = np.stack(mc_preds, axis=0)                  # (n_samples, N)
-mean_pred = mc_preds.mean(axis=0)
-rmse = float(np.sqrt(np.mean((y_te.squeeze() - mean_pred)**2)))
+if __name__ == "__main__":
+    main()
 
-lower = np.percentile(mc_preds, 2.5, axis=0)
-upper = np.percentile(mc_preds, 97.5, axis=0)
-covered = (lower <= y_te.squeeze()) & (y_te.squeeze() <= upper)
-coverage = float(covered.mean())
-width = float((upper - lower).mean())
-
-print(f"RMSE: {rmse:.4f}")
-print(f"Coverage (95%): {coverage:.4f}")
-print(f"Mean interval width: {width:.4f}")
-PY
 ```
