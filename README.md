@@ -1,11 +1,10 @@
-# DeepSurrogate_model
+# Code
 
 
 This Python package provides flexible building blocks to construct explainable surrogate models for complex, high-fidelity computer simulations.
 
 The core idea follows the architecture described in:
 
-**DeepSurrogate: An Interpretable Artificial Intelligence System for Efficient Modeling of Functional Surrogates for High-Fidelity Computer Models**
 
 ---
 
