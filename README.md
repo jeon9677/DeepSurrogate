@@ -35,7 +35,7 @@ pip install .
 ---
 
 ## A basic example of using the package
-Note: The toy example below only illustrates the data structure used to run the model. It does not replicate the full complexity of the simulations used in the paper. For actual analysis, please follow the simulation design described in the paper.
+Note: The toy example below only illustrates the data structure used to run the model. It does not replicate the full complexity of the simulations used in the paper. For actual analysis, please follow the simulation design described in the paper. The final element of `global_hidden` and `spatial_hidden` in the `get_model_deepsurrogate` function must be equal, since the global and spatial branch outputs are combined via element-wise multiplication (Multiply layer).
 
 ```bash
 
