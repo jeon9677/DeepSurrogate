@@ -1,7 +1,7 @@
 import numpy as np
 from .models import get_model_deepsurrogate
 
-def train_model_ver8(
+def train_model(
     X_train, y_train,
     X_val, y_val,
     global_dim,
