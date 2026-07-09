@@ -72,10 +72,10 @@ def get_model_deepsurrogate(
     out = Dense(1, activation=final_act)(final)
 
     # Log-sigma^2 term
-    log_sigma2 = Dense(32, activation='softplus')(s_input)
-    log_sigma2 = get_dropout(log_sigma2, p=0.1, mc=mc)
-    log_sigma2 = Dense(16, activation='softplus')(log_sigma2)
-    log_sigma2 = get_dropout(log_sigma2, p=0.1, mc=mc)
+    log_sigma2 = s_input
+    for units in noise_hidden:
+        log_sigma2 = Dense(units, activation='softplus')(log_sigma2)
+        log_sigma2 = get_dropout(log_sigma2, p=dropout_p, mc=mc)
     log_sigma2 = Dense(1, activation='linear', name='log_sigma2')(log_sigma2)
 
     noise = Lambda(lambda x: tf.exp(x), name='lognormal_noise')(log_sigma2)
