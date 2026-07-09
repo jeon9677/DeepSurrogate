@@ -90,16 +90,34 @@ def main():
 
     model = get_model_deepsurrogate(global_dim=args.p, spatial_dim=args.spatial_dim,
                                     local_dim=args.q, mc=args.mc, final_act="linear")
-    model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss="mse")
+    # model is already compiled inside get_model_deepsurrogate
+    # (Adam optimizer with ExponentialDecay learning rate schedule)
     model.fit(X_tr, y_tr, validation_data=(X_va, y_va),
               epochs=args.epochs, batch_size=args.batch_size, verbose=1)
 
     # MC prediction
     n_samples = 100
-    preds = np.stack([model.predict(X_te, verbose=0).squeeze() for _ in range(n_samples)], axis=0)
-    mean_pred = preds.mean(axis=0)
+    # model output shape: (n_test, 2) -> [:,0]=mu, [:,1]=log_sigma2
+    preds_mu = []
+    preds_sigma2 = []
+    for _ in range(n_samples):
+        out = model.predict(X_te, verbose=0)
+        preds_mu.append(out[:, 0])
+        preds_sigma2.append(np.exp(out[:, 1]))
+    
+    preds_mu = np.stack(preds_mu, axis=0)          # (n_samples, n_test)
+    preds_sigma2 = np.stack(preds_sigma2, axis=0)  # (n_samples, n_test)
+    
+    # MC dropout: predictive mean and predictive variance
+    mean_pred = preds_mu.mean(axis=0)
+    # total predictive variance = variance from dropout(epistemic) + averaged aleatoric variance
+    epistemic_var = preds_mu.var(axis=0)
+    aleatoric_var = preds_sigma2.mean(axis=0)
+    total_var = epistemic_var + aleatoric_var
+    
     rmse = float(np.sqrt(np.mean((y_te.squeeze() - mean_pred)**2)))
     print(f"RMSE: {rmse:.4f}")
+    print(f"Mean predictive std: {np.sqrt(total_var).mean():.4f}")
 
 if __name__ == "__main__":
     main()
