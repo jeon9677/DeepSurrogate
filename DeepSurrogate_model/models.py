@@ -3,8 +3,21 @@ import tensorflow as tf
 from tensorflow.keras import Input, Model
 from tensorflow.keras.layers import Dense, Dropout, Multiply, Add, Lambda, concatenate
 
-def get_dropout(x, p=0.5, mc=False):
-    return Dropout(p)(x, training=mc)
+def get_dropout(x, p=0.5, mc=False, training=None):
+    return Dropout(p)(x, training=True if mc else training)
+
+
+def gaussian_nll(y_true, y_pred_mean_logvar):
+    """
+    Negative log-likelihood for y ~ N(mu, exp(log_sigma2)).
+    Expects a concatenated tensor [mu, log_sigma2] as y_pred if using a single
+    output, OR you can pass mu, log_sigma2 separately — see note below.
+    """
+    mu, log_sigma2 = y_pred_mean_logvar
+    sigma2 = tf.exp(log_sigma2)
+    nll = 0.5 * (log_sigma2 + tf.square(y_true - mu) / (sigma2 + 1e-8))
+    return tf.reduce_mean(nll)
+
 
 def get_model_deepsurrogate(
     global_dim=5,
@@ -51,6 +64,7 @@ def get_model_deepsurrogate(
         eta = get_dropout(eta, p=dropout_p, mc=mc)
 
     # Combine
+    # Note: The final element of `global_hidden` and `spatial_hidden` must be equal, since the global and spatial branch outputs are combined via element-wise multiplication (Multiply layer).
     B_eta = Multiply(name='basis_eta_product')([x, eta])
     B_eta_sum = Lambda(lambda x: tf.reduce_sum(x, axis=1, keepdims=True), name='sum_B_eta')(B_eta)
 
@@ -65,9 +79,12 @@ def get_model_deepsurrogate(
     log_sigma2 = Dense(1, activation='linear', name='log_sigma2')(log_sigma2)
 
     noise = Lambda(lambda x: tf.exp(x), name='lognormal_noise')(log_sigma2)
-    final_output = Add(name='final_output')([out, noise])
-    
+    # final_output = Add(name='final_output')([out, noise])
+    final_output = Concatenate(name='mu_logsigma2')([out, log_sigma2])
+
     model = Model(inputs=[inp_global, s_input, local_input], outputs=final_output)
+
+
 
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate=1e-2,
@@ -75,6 +92,7 @@ def get_model_deepsurrogate(
         decay_rate=0.96
     )
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-    model.compile(optimizer=optimizer, loss='mse', metrics=['mse'])
+    # model.compile(optimizer=optimizer, loss='mse', metrics=['mse'])
+    model.compile(optimizer=optimizer, loss=gaussian_nll, metrics=['mse'])
 
     return model
