@@ -40,7 +40,7 @@ Note: The toy example below only illustrates the data structure used to run the 
 
 import argparse, numpy as np, tensorflow as tf
 from DeepSurrogate_model import train_model, mc_predict
-```
+
 
 
 def make_data(s=300, m=148, p=2, q=5, spatial_dim=2, seed=42):
