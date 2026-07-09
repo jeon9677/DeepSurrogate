@@ -12,6 +12,7 @@ def train_model(
     noise_hidden=[32, 16],
     dropout_p=0.1,
     mc=True,
+    final_act="softplus",
     epochs=10,
     batch_size=128
 ):
