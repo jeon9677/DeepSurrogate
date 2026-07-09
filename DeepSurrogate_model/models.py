@@ -41,7 +41,7 @@ def get_model_deepsurrogate(
         global_dim (int): dimension of global feature 
         spatial_dim (int):  dimension of spatial coordinates 
         local_dim (int): dimension of local feature 
-        global_hidden (list): 글로벌 term Dense layer units
+        global_hidden (list): Dense layer units for the global branch
         spatial_hidden (list): spatial term Dense layer units
         noise_hidden (list): noise branch Dense layer units
         dropout_p (float): dropout rate
@@ -83,7 +83,7 @@ def get_model_deepsurrogate(
         log_sigma2 = get_dropout(log_sigma2, p=dropout_p, mc=mc)
     log_sigma2 = Dense(1, activation='linear', name='log_sigma2')(log_sigma2)
 
-    noise = Lambda(lambda x: tf.exp(x), name='lognormal_noise')(log_sigma2)
+    # noise = Lambda(lambda x: tf.exp(x), name='lognormal_noise')(log_sigma2)
     # final_output = Add(name='final_output')([out, noise])
     final_output = Concatenate(name='mu_logsigma2')([out, log_sigma2])
 
