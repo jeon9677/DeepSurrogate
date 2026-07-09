@@ -1,22 +1,27 @@
 
 import tensorflow as tf
 from tensorflow.keras import Input, Model
-from tensorflow.keras.layers import Dense, Dropout, Multiply, Add, Lambda, concatenate
+from tensorflow.keras.layers import Dense, Dropout, Multiply, Lambda, Concatenate, concatenate
 
 def get_dropout(x, p=0.5, mc=False, training=None):
     return Dropout(p)(x, training=True if mc else training)
 
 
-def gaussian_nll(y_true, y_pred_mean_logvar):
+def gaussian_nll(y_true, y_pred):
     """
     Negative log-likelihood for y ~ N(mu, exp(log_sigma2)).
-    Expects a concatenated tensor [mu, log_sigma2] as y_pred if using a single
-    output, OR you can pass mu, log_sigma2 separately — see note below.
+    y_pred: concatenated [mu, log_sigma2], shape (batch, 2)
     """
-    mu, log_sigma2 = y_pred_mean_logvar
+    mu = y_pred[:, 0:1]
+    log_sigma2 = y_pred[:, 1:2]
     sigma2 = tf.exp(log_sigma2)
     nll = 0.5 * (log_sigma2 + tf.square(y_true - mu) / (sigma2 + 1e-8))
     return tf.reduce_mean(nll)
+
+
+def mu_mse(y_true, y_pred):
+    mu = y_pred[:, 0:1]
+    return tf.reduce_mean(tf.square(y_true - mu))
 
 
 def get_model_deepsurrogate(
@@ -84,8 +89,6 @@ def get_model_deepsurrogate(
 
     model = Model(inputs=[inp_global, s_input, local_input], outputs=final_output)
 
-
-
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         initial_learning_rate=1e-2,
         decay_steps=1000,
@@ -93,6 +96,6 @@ def get_model_deepsurrogate(
     )
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
     # model.compile(optimizer=optimizer, loss='mse', metrics=['mse'])
-    model.compile(optimizer=optimizer, loss=gaussian_nll, metrics=['mse'])
+    model.compile(optimizer=optimizer, loss=gaussian_nll, metrics=[mu_mse])
 
     return model
