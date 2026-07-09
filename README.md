@@ -42,7 +42,6 @@ import argparse, numpy as np, tensorflow as tf
 from DeepSurrogate_model import train_model, mc_predict
 
 
-
 def make_data(s=300, m=148, p=2, q=5, spatial_dim=2, seed=42):
     rng = np.random.default_rng(seed)
     coords = rng.uniform(-1, 1, size=(m, spatial_dim)).astype("float32")
