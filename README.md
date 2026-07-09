@@ -67,6 +67,8 @@ def pack(y, x, z, coords):
     return [G.astype("float32"), S.astype("float32"), L.astype("float32")], Y.astype("float32")
 
 def main():
+    tf.random.set_seed(args.seed)
+    np.random.seed(args.seed)
     ap = argparse.ArgumentParser()
     ap.add_argument("--s", type=int, default=300)
     ap.add_argument("--m", type=int, default=148)
@@ -97,7 +99,7 @@ def main():
     preds = np.stack([model.predict(X_te, verbose=0).squeeze() for _ in range(n_samples)], axis=0)
     mean_pred = preds.mean(axis=0)
     rmse = float(np.sqrt(np.mean((y_te.squeeze() - mean_pred)**2)))
-    print(f"RMSE: {rmse:.4f})
+    print(f"RMSE: {rmse:.4f}")
 
 if __name__ == "__main__":
     main()
