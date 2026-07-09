@@ -41,6 +41,7 @@ Note: The toy example below only illustrates the data structure used to run the 
 
 import argparse, numpy as np, tensorflow as tf
 from DeepSurrogate_model.models import get_model_deepsurrogate
+from DeepSurrogate_model.train import mc_predict
 
 def make_data(s=300, m=148, p=2, q=5, spatial_dim=2, seed=42):
     rng = np.random.default_rng(seed)
@@ -90,31 +91,14 @@ def main():
 
     model = get_model_deepsurrogate(global_dim=args.p, spatial_dim=args.spatial_dim,
                                     local_dim=args.q, mc=args.mc, final_act="linear")
+
     # model is already compiled inside get_model_deepsurrogate
-    # (Adam optimizer with ExponentialDecay learning rate schedule)
+    # (Adam optimizer with ExponentialDecay learning rate schedule, gaussian_nll loss)
     model.fit(X_tr, y_tr, validation_data=(X_va, y_va),
               epochs=args.epochs, batch_size=args.batch_size, verbose=1)
-
-    # MC prediction
-    n_samples = 100
-    # model output shape: (n_test, 2) -> [:,0]=mu, [:,1]=log_sigma2
-    preds_mu = []
-    preds_sigma2 = []
-    for _ in range(n_samples):
-        out = model.predict(X_te, verbose=0)
-        preds_mu.append(out[:, 0])
-        preds_sigma2.append(np.exp(out[:, 1]))
     
-    preds_mu = np.stack(preds_mu, axis=0)          # (n_samples, n_test)
-    preds_sigma2 = np.stack(preds_sigma2, axis=0)  # (n_samples, n_test)
-    
-    # MC dropout: predictive mean and predictive variance
-    mean_pred = preds_mu.mean(axis=0)
-    # total predictive variance = variance from dropout(epistemic) + averaged aleatoric variance
-    epistemic_var = preds_mu.var(axis=0)
-    aleatoric_var = preds_sigma2.mean(axis=0)
-    total_var = epistemic_var + aleatoric_var
-    
+    # MC dropout prediction (epistemic + aleatoric uncertainty)
+    mean_pred, epistemic_var, aleatoric_var, total_var = mc_predict(model, X_te, n_samples=100)
     rmse = float(np.sqrt(np.mean((y_te.squeeze() - mean_pred)**2)))
     print(f"RMSE: {rmse:.4f}")
     print(f"Mean predictive std: {np.sqrt(total_var).mean():.4f}")
